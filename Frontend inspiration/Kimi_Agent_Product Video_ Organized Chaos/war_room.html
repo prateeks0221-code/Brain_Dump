@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Enter the War Room</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <style>
+    :root {
+      --amber: #ff9933;
+      --amber-dim: #ff993344;
+      --blood: #cc2222;
+      --void: #050201;
+      --parchment: #e8d5b5;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      background: var(--void);
+      color: var(--parchment);
+      font-family: 'Courier New', Courier, monospace;
+      overflow-x: hidden;
+    }
+
+    /* ── Atmosphere ── */
+    .grain {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 999;
+      opacity: 0.06;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    .vignette {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 998;
+      background: radial-gradient(circle at center, transparent 30%, rgba(0,0,0,0.85) 90%);
+    }
+
+    .light-leak {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 997;
+      background: radial-gradient(circle at 20% 30%, rgba(255,160,60,0.08) 0%, transparent 50%),
+                  radial-gradient(circle at 80% 70%, rgba(255,100,30,0.05) 0%, transparent 50%);
+      mix-blend-mode: screen;
+    }
+
+    /* ── Scroll Hint ── */
+    .scroll-hint {
+      position: fixed;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      font-size: 0.75rem;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      opacity: 0.7;
+      animation: pulse 2.5s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.3; transform: translateX(-50%) translateY(0); }
+      50% { opacity: 0.9; transform: translateX(-50%) translateY(-6px); }
+    }
+
+    /* ── Sections ── */
+    .scene {
+      position: relative;
+      width: 100%;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--void);
+    }
+
+    .scene-media {
+      position: absolute;
+      inset: -5%;
+      width: 110%;
+      height: 110%;
+      object-fit: cover;
+      will-change: transform, opacity, filter;
+    }
+
+    .scene-caption {
+      position: absolute;
+      bottom: 12%;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      z-index: 20;
+      font-size: clamp(0.8rem, 2vw, 1.1rem);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      opacity: 0;
+      text-shadow: 0 2px 20px rgba(0,0,0,0.95), 0 0 40px rgba(0,0,0,0.8);
+      max-width: 700px;
+      padding: 0 24px;
+      pointer-events: none;
+    }
+
+    .scene-caption span {
+      display: inline-block;
+    }
+
+    /* ── Portal ── */
+    #portal .portal-glow {
+      position: absolute;
+      width: 340px;
+      height: 220px;
+      border: 1px solid rgba(255, 153, 51, 0.4);
+      border-radius: 10px;
+      box-shadow: 0 0 40px rgba(255, 153, 51, 0.25), inset 0 0 40px rgba(255, 153, 51, 0.1);
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    /* ── Cards ── */
+    .card-ghost {
+      position: absolute;
+      width: 70px;
+      height: 100px;
+      background: linear-gradient(135deg, #1a1208, #0d0903);
+      border: 1px solid rgba(255, 200, 120, 0.15);
+      border-radius: 6px;
+      box-shadow: 0 0 20px rgba(255, 153, 51, 0.1);
+      z-index: 5;
+      opacity: 0;
+    }
+
+    /* ── Room ── */
+    #room::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 50% 50%, transparent 20%, rgba(5,2,1,0.6) 100%);
+      z-index: 8;
+      pointer-events: none;
+    }
+
+    /* ── Todo ── */
+    .spotlight-beam {
+      position: absolute;
+      top: -20%;
+      left: 30%;
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, rgba(255,200,120,0.12) 0%, transparent 65%);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 9;
+      filter: blur(20px);
+      opacity: 0;
+    }
+
+    /* ── Table ── */
+    #table .overhead-glow {
+      position: absolute;
+      top: -10%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      height: 500px;
+      background: radial-gradient(ellipse at center, rgba(255,180,80,0.15) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 9;
+      opacity: 0;
+    }
+
+    /* ── Wall / Strings ── */
+    .string-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 15;
+      pointer-events: none;
+    }
+    .red-string {
+      stroke: var(--blood);
+      stroke-width: 1.8;
+      fill: none;
+      stroke-linecap: round;
+      opacity: 0.85;
+      filter: drop-shadow(0 0 3px rgba(204,34,34,0.5));
+      stroke-dasharray: 1200;
+      stroke-dashoffset: 1200;
+    }
+
+    /* ── Progress Bar ── */
+    .progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--amber), var(--blood));
+      z-index: 1001;
+      width: 0%;
+      box-shadow: 0 0 10px var(--amber-dim);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═══ ATMOSPHERE ═══ -->
+  <div class="grain"></div>
+  <div class="vignette"></div>
+  <div class="light-leak"></div>
+  <div class="progress" id="progressBar"></div>
+  <div class="scroll-hint" id="scrollHint">Scroll to Enter</div>
+
+  <!-- ═══ SCENE 1: THE THRESHOLD ═══ -->
+  <section class="scene" id="portal">
+    <img src="01_single_pin_light.jpg" class="scene-media portal-img" alt="glowing portal"/>
+    <div class="portal-glow"></div>
+    <div class="scene-caption">
+      <span>A single thread of light in the void.</span>
+    </div>
+  </section>
+
+  <!-- ═══ SCENE 2: THE SCATTER ═══ -->
+  <section class="scene" id="cards">
+    <img src="02_pull_back_cards.jpg" class="scene-media cards-img" alt="floating cards"/>
+    <!-- Decorative floating ghosts -->
+    <div class="card-ghost" style="top:20%; left:15%; transform:rotate(-12deg)"></div>
+    <div class="card-ghost" style="top:60%; left:80%; transform:rotate(8deg)"></div>
+    <div class="card-ghost" style="top:75%; left:25%; transform:rotate(-5deg)"></div>
+    <div class="card-ghost" style="top:30%; left:70%; transform:rotate(15deg)"></div>
+    <div class="scene-caption">
+      <span>Fragments of memory drift past.</span>
+    </div>
+  </section>
+
+  <!-- ═══ SCENE 3: THE CHAMBER ═══ -->
+  <section class="scene" id="room">
+    <img src="03_full_room_reveal.jpg" class="scene-media room-img" alt="war room"/>
+    <div class="scene-caption">
+      <span>The room breathes. Seven boards. One truth.</span>
+    </div>
+  </section>
+
+  <!-- ═══ SCENE 4: THE MUNDANE ═══ -->
+  <section class="scene" id="todo">
+    <img src="04_todo_tonight.jpg" class="scene-media todo-img" alt="todo board"/>
+    <div class="spotlight-beam"></div>
+    <div class="scene-caption">
+      <span>Even the keeper of secrets has dry cleaning.</span>
+    </div>
+  </section>
+
+  <!-- ═══ SCENE 5: THE EVIDENCE ═══ -->
+  <section class="scene" id="table">
+    <img src="05_inbox_table.jpg" class="scene-media table-img" alt="inbox table"/>
+    <div class="overhead-glow"></div>
+    <div class="scene-caption">
+      <span>Every loose end gathers here.</span>
+    </div>
+  </section>
+
+  <!-- ═══ SCENE 6: THE PATTERN ═══ -->
+  <section class="scene" id="wall">
+    <img src="06_wall_detail.jpg" class="scene-media wall-img" alt="war room wall"/>
+    <svg class="string-svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+      <!-- Approximated red strings connecting evidence -->
+      <path class="red-string" d="M 180 280 Q 450 180 750 420 T 1300 320" />
+      <path class="red-string" d="M 850 220 Q 700 550 1050 680 T 1500 450" />
+      <path class="red-string" d="M 250 750 Q 550 600 800 520 T 1400 720" />
+      <path class="red-string" d="M 1200 180 Q 1100 400 1350 550 T 1600 380" />
+      <path class="red-string" d="M 400 900 Q 600 750 900 850 T 1200 600" />
+      <path class="red-string" d="M 1600 250 Q 1450 500 1650 700 T 1750 900" />
+    </svg>
+    <div class="scene-caption">
+      <span>The connections emerge. Follow the string.</span>
+    </div>
+  </section>
+
+  <script>
+    gsap.registerPlugin(ScrollTrigger);
+
+    const progressBar = document.getElementById('progressBar');
+    const scrollHint = document.getElementById('scrollHint');
+
+    // Global progress
+    gsap.to(progressBar, {
+      width: '100%',
+      ease: 'none',
+      scrollTrigger: { trigger: 'body', start: 'top top', end: 'bottom bottom', scrub: 0.3 }
+    });
+
+    // Hide hint on first scroll
+    ScrollTrigger.create({
+      trigger: '#portal',
+      start: 'top top',
+      onUpdate: (self) => {
+        if (self.progress > 0.05) gsap.to(scrollHint, { opacity: 0, duration: 0.5 });
+      }
+    });
+
+    // ── SCENE 1: PORTAL ──
+    const tlPortal = gsap.timeline({
+      scrollTrigger: { trigger: '#portal', start: 'top top', end: '+=140%', pin: true, scrub: 0.7 }
+    });
+    tlPortal
+      .fromTo('.portal-img', 
+        { scale: 0.6, opacity: 0, filter: 'brightness(0.4) blur(4px)' },
+        { scale: 1.6, opacity: 1, filter: 'brightness(1.2) blur(0px)', ease: 'power2.in' }
+      )
+      .fromTo('.portal-glow',
+        { scale: 0.8, opacity: 0.3 },
+        { scale: 1.4, opacity: 1, ease: 'power2.in' }, 0
+      )
+      .fromTo('#portal .scene-caption span',
+        { opacity: 0, y: 20, letterSpacing: '8px' },
+        { opacity: 1, y: 0, letterSpacing: '3px', duration: 0.25 }, 0.1)
+      .to('#portal', { opacity: 0, duration: 0.15 }, 0.85);
+
+    // ── SCENE 2: CARDS ──
+    const tlCards = gsap.timeline({
+      scrollTrigger: { trigger: '#cards', start: 'top top', end: '+=140%', pin: true, scrub: 0.7 }
+    });
+    tlCards
+      .fromTo('.cards-img',
+        { scale: 1.8, opacity: 0, filter: 'brightness(0.3) blur(12px) saturate(0.5)' },
+        { scale: 1, opacity: 1, filter: 'brightness(1.1) blur(0px) saturate(1)', ease: 'power2.out' }
+      )
+      .fromTo('.card-ghost',
+        { opacity: 0, z: -200 },
+        { opacity: 0.6, z: 100, stagger: 0.05, ease: 'power1.out' }, 0.1)
+      .fromTo('#cards .scene-caption span',
+        { opacity: 0, y: 30 },
+        { opacity: 1, y: 0, duration: 0.2 }, 0.2)
+      .to('#cards', { opacity: 0, duration: 0.15 }, 0.85);
+
+    // ── SCENE 3: ROOM ──
+    const tlRoom = gsap.timeline({
+      scrollTrigger: { trigger: '#room', start: 'top top', end: '+=150%', pin: true, scrub: 0.7 }
+    });
+    tlRoom
+      .fromTo('.room-img',
+        { scale: 1.4, opacity: 0, filter: 'brightness(0.15) contrast(1.3)' },
+        { scale: 1, opacity: 1, filter: 'brightness(1) contrast(1.05)', ease: 'power2.out' }
+      )
+      .fromTo('#room .scene-caption span',
+        { opacity: 0, y: 25, clipPath: 'inset(0 100% 0 0)' },
+        { opacity: 1, y: 0, clipPath: 'inset(0 0% 0 0)', duration: 0.3 }, 0.25)
+      .to('#room', { opacity: 0, duration: 0.15 }, 0.85);
+
+    // ── SCENE 4: TODO ──
+    const tlTodo = gsap.timeline({
+      scrollTrigger: { trigger: '#todo', start: 'top top', end: '+=130%', pin: true, scrub: 0.7 }
+    });
+    tlTodo
+      .fromTo('.todo-img',
+        { scale: 1.25, opacity: 0, x: '-8%', filter: 'sepia(0.4) brightness(0.5)' },
+        { scale: 1, opacity: 1, x: '0%', filter: 'sepia(0.15) brightness(1.05)', ease: 'power2.out' }
+      )
+      .fromTo('.spotlight-beam',
+        { scale: 0.6, opacity: 0 },
+        { scale: 1.3, opacity: 1, ease: 'power2.inOut' }, 0)
+      .fromTo('#todo .scene-caption span',
+        { opacity: 0, y: 15 },
+        { opacity: 1, y: 0 }, 0.2)
+      .to('#todo', { opacity: 0, duration: 0.15 }, 0.85);
+
+    // ── SCENE 5: TABLE ──
+    const tlTable = gsap.timeline({
+      scrollTrigger: { trigger: '#table', start: 'top top', end: '+=130%', pin: true, scrub: 0.7 }
+    });
+    tlTable
+      .fromTo('.table-img',
+        { scale: 1.2, opacity: 0, y: '8%', filter: 'brightness(0.2) contrast(1.2)' },
+        { scale: 1, opacity: 1, y: '0%', filter: 'brightness(1.1) contrast(1.05)', ease: 'power2.out' }
+      )
+      .fromTo('.overhead-glow',
+        { opacity: 0, scale: 0.8 },
+        { opacity: 1, scale: 1.2, ease: 'power2.out' }, 0.1)
+      .fromTo('#table .scene-caption span',
+        { opacity: 0, y: 20 },
+        { opacity: 1, y: 0 }, 0.25)
+      .to('#table', { opacity: 0, duration: 0.15 }, 0.85);
+
+    // ── SCENE 6: WALL ──
+    const tlWall = gsap.timeline({
+      scrollTrigger: { trigger: '#wall', start: 'top top', end: '+=150%', pin: true, scrub: 0.7 }
+    });
+    tlWall
+      .fromTo('.wall-img',
+        { scale: 1.15, opacity: 0, filter: 'sepia(0.5) brightness(0.35) contrast(1.2)' },
+        { scale: 1, opacity: 1, filter: 'sepia(0.2) brightness(0.95) contrast(1.1)', ease: 'power2.out' }
+      )
+      .to('.red-string',
+        { strokeDashoffset: 0, stagger: 0.08, ease: 'power2.out' }, 0.2)
+      .fromTo('#wall .scene-caption span',
+        { opacity: 0, y: 20 },
+        { opacity: 1, y: 0 }, 0.4);
+
+    // ── Ambient Mouse Parallax (subtle) ──
+    if (!window.matchMedia('(pointer: coarse)').matches) {
+      document.addEventListener('mousemove', (e) => {
+        const x = (e.clientX / window.innerWidth - 0.5) * 15;
+        const y = (e.clientY / window.innerHeight - 0.5) * 15;
+        gsap.to('.scene-media', { x: x, y: y, duration: 1.2, ease: 'power2.out' });
+      });
+    }
+
+    // ── Light Flicker on Wall Scene ──
+    gsap.to('.wall-img', {
+      filter: 'sepia(0.2) brightness(1.0) contrast(1.1)',
+      duration: 0.1,
+      repeat: -1,
+      yoyo: true,
+      ease: 'steps(2)',
+      scrollTrigger: { trigger: '#wall', start: 'top bottom', toggleActions: 'play pause resume pause' }
+    });
+  </script>
+</body>
+</html>

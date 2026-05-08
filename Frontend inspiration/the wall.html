@@ -1,0 +1,1204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>the room — luca</title>
+<meta name="viewport" content="width=1440" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* room */
+  --void:        #0a0a0c;
+  --void-deep:   #050507;
+  --cork:        #1a1208;
+  --cork-line:   rgba(200,169,126,0.045);
+  --cork-line-2: rgba(200,169,126,0.025);
+  --wood:        #1c140d;
+  --wood-grain:  rgba(120,80,40,0.07);
+
+  /* light */
+  --tungsten:    #c8a97e;
+  --tungsten-hi: #e8caa0;
+  --tungsten-lo: #8a7250;
+  --paper:       #e9dcc0;
+  --paper-2:     #d8c8a6;
+  --paper-3:     #c8b89a;
+  --ink:         #1a140c;
+  --ink-soft:    #3a2e1f;
+  --pin-red:     #b03a2e;
+  --pin-red-hi:  #d65848;
+
+  /* type */
+  --serif: "EB Garamond", "Garamond", serif;
+  --mono:  "Space Mono", "IBM Plex Mono", ui-monospace, monospace;
+
+  /* layout */
+  --room-pad: 40px;
+  --wall-gap: 14px;
+  --reveal-base: 2400ms; /* iris done, walls begin */
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--void-deep);}
+body{
+  font-family: var(--serif);
+  color: var(--paper);
+  overflow:hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* =============================================================
+   ROOM SHELL
+============================================================= */
+.room{
+  position:fixed; inset:0;
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 40%, rgba(200,169,126,0.075), transparent 60%),
+    radial-gradient(ellipse 90% 80% at 50% 60%, rgba(200,169,126,0.025), transparent 70%),
+    var(--void);
+  perspective: 2200px;
+  perspective-origin: 50% 45%;
+  opacity:0;
+}
+.room.lit{ opacity:1; transition: opacity 700ms ease-out; }
+
+/* subtle film grain over everything */
+.room::after{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background-image:
+    radial-gradient(rgba(255,240,210,0.025) 1px, transparent 1px),
+    radial-gradient(rgba(0,0,0,0.06) 1px, transparent 1px);
+  background-size: 3px 3px, 5px 5px;
+  background-position: 0 0, 1px 2px;
+  mix-blend-mode: overlay;
+  opacity:0.55;
+}
+
+/* vignette + warm light beam from above-center */
+.beam{
+  position:absolute; inset:0; pointer-events:none;
+  background:
+    radial-gradient(ellipse 38% 55% at 50% 0%, rgba(232,202,160,0.10), transparent 65%),
+    radial-gradient(ellipse 120% 100% at 50% 50%, transparent 55%, rgba(0,0,0,0.55) 100%);
+  z-index: 2;
+}
+
+/* =============================================================
+   ENTRY: PIN + IRIS
+============================================================= */
+.pin-of-light{
+  position:absolute; left:50%; top:42%;
+  width:2px; height:2px; border-radius:50%;
+  background: var(--tungsten-hi);
+  box-shadow:
+    0 0 4px var(--tungsten-hi),
+    0 0 12px rgba(232,202,160,0.7),
+    0 0 28px rgba(200,169,126,0.4);
+  transform: translate(-50%,-50%);
+  z-index: 50;
+  animation: pin-breathe 1800ms ease-in-out infinite;
+}
+@keyframes pin-breathe{
+  0%,100% { opacity:0.55; box-shadow: 0 0 4px var(--tungsten-hi), 0 0 10px rgba(232,202,160,0.5); }
+  50%     { opacity:1.0;  box-shadow: 0 0 6px var(--tungsten-hi), 0 0 22px rgba(232,202,160,0.85), 0 0 50px rgba(200,169,126,0.5); }
+}
+.pin-of-light.iris{
+  animation: iris-open 1500ms cubic-bezier(.22,.61,.36,1) forwards;
+}
+@keyframes iris-open{
+  0%   { width:2px; height:2px; opacity:1;
+         box-shadow: 0 0 6px var(--tungsten-hi), 0 0 22px rgba(232,202,160,0.85); }
+  40%  { width:60px; height:60px; opacity:0.9;
+         box-shadow: 0 0 80px rgba(232,202,160,0.7), 0 0 220px rgba(200,169,126,0.45); }
+  100% { width: 1800px; height: 1800px; opacity:0;
+         box-shadow: 0 0 0 rgba(232,202,160,0); }
+}
+
+/* =============================================================
+   STAGE: WALLS + INBOX
+============================================================= */
+.stage{
+  position:absolute; inset:0;
+  display:grid;
+  grid-template-rows: auto 1fr auto;
+  grid-template-columns: 1fr 220px;
+  gap: 0;
+  padding: 28px 32px 24px;
+  z-index: 3;
+  transform-style: preserve-3d;
+}
+
+/* room header — burned brand line */
+.room-head{
+  grid-column: 1 / -1;
+  display:flex; align-items:baseline; justify-content:space-between;
+  padding: 4px 6px 14px;
+  border-bottom: 1px solid rgba(200,169,126,0.08);
+  margin-bottom: 14px;
+}
+.room-head .mark{
+  font-family: var(--serif); font-style: italic;
+  font-size: 22px; letter-spacing: 0.02em;
+  color: var(--paper-2);
+}
+.room-head .mark .amp{ color: var(--tungsten); }
+.room-head .meta{
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--tungsten-lo);
+  display:flex; gap: 22px;
+}
+.room-head .meta .dot{ color: var(--tungsten); }
+
+/* WALLS GRID — 9 walls, 3x3, top 70% */
+.walls{
+  grid-column: 1 / 2;
+  grid-row: 2 / 3;
+  display:grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: var(--wall-gap);
+  transform-style: preserve-3d;
+  transition: transform 900ms cubic-bezier(.22,.61,.36,1), filter 700ms ease;
+  will-change: transform;
+}
+.walls.zoomed{ /* container blurs siblings via per-wall classes */ }
+
+.wall{
+  position:relative;
+  background:
+    /* warm rim from top */
+    linear-gradient(180deg, rgba(200,169,126,0.06), transparent 38%),
+    /* cork base */
+    var(--cork);
+  border: 1px solid rgba(200,169,126,0.09);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 0 0 1px rgba(0,0,0,0.4),
+    inset 0 1px 0 rgba(232,202,160,0.04),
+    inset 0 -40px 60px rgba(0,0,0,0.45),
+    0 1px 0 rgba(0,0,0,0.6),
+    0 8px 22px rgba(0,0,0,0.55);
+  overflow:hidden;
+  cursor: pointer;
+  transform-style: preserve-3d;
+  transition: transform 700ms cubic-bezier(.22,.61,.36,1),
+              filter 600ms ease,
+              opacity 600ms ease,
+              box-shadow 400ms ease;
+  /* entry stagger */
+  opacity: 0;
+  transform: translateZ(-40px) translateY(8px);
+}
+.wall.lit{
+  opacity: 1;
+  transform: translateZ(0) translateY(0);
+}
+/* cork grid texture */
+.wall::before{
+  content:""; position:absolute; inset:0;
+  background:
+    repeating-linear-gradient(0deg,   var(--cork-line) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(90deg,  var(--cork-line) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(0deg,   var(--cork-line-2) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(90deg,  var(--cork-line-2) 0 1px, transparent 1px 7px);
+  mix-blend-mode: screen;
+  pointer-events:none;
+}
+/* faint warm glow when wall is "alive" (hover) */
+.wall::after{
+  content:""; position:absolute; inset:-1px;
+  pointer-events:none;
+  box-shadow: inset 0 0 0 1px rgba(200,169,126,0);
+  transition: box-shadow 350ms ease, background 350ms ease;
+}
+.wall:hover::after{
+  box-shadow: inset 0 0 0 1px rgba(200,169,126,0.18),
+              inset 0 0 60px rgba(200,169,126,0.06);
+}
+/* drop-target glow */
+.wall.drop-target::after{
+  box-shadow: inset 0 0 0 1px rgba(232,202,160,0.45),
+              inset 0 0 80px rgba(232,202,160,0.18);
+  background: rgba(200,169,126,0.04);
+}
+
+/* wall label — burned-in caps above each wall */
+.wall .label{
+  position:absolute; top:8px; left:10px;
+  font-family: var(--mono);
+  font-size: 9px; letter-spacing: 0.22em;
+  color: var(--tungsten);
+  text-transform: uppercase;
+  text-shadow: 0 0 6px rgba(176,58,46,0.0), 0 1px 0 rgba(0,0,0,0.6);
+  opacity: 0.78;
+  z-index: 5;
+}
+.wall .label .num{
+  color: var(--tungsten-lo);
+  margin-right: 6px;
+}
+.wall .count{
+  position:absolute; top:8px; right:10px;
+  font-family: var(--mono);
+  font-size: 9px; letter-spacing: 0.18em;
+  color: var(--tungsten-lo);
+  z-index: 5;
+}
+
+/* CARDS pinned to walls */
+.card{
+  position:absolute;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 8px 10px 9px;
+  border-radius: 1px;
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.15),
+    0 1px 0 rgba(255,255,255,0.4) inset,
+    0 6px 12px rgba(0,0,0,0.55),
+    0 14px 24px rgba(0,0,0,0.35);
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+  width: 96px;
+  cursor: pointer;
+  transform-origin: 50% 0%;
+  transition: transform 280ms cubic-bezier(.22,.61,.36,1),
+              box-shadow 280ms ease,
+              filter 280ms ease;
+  /* entry — slightly out of focus, then sharpen */
+  opacity: 0;
+  filter: blur(2px);
+  will-change: transform, filter, opacity;
+}
+.card.lit{
+  opacity: 1;
+  filter: blur(0);
+}
+.card.tone-2{ background: var(--paper-2); }
+.card.tone-3{ background: var(--paper-3); }
+.card.tall{ width: 86px; }
+.card.wide{ width: 110px; }
+
+.card .pin{
+  position:absolute; top:-3px; left:50%;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, var(--pin-red-hi), var(--pin-red) 60%, #5a1a14 100%);
+  box-shadow:
+    0 1px 1px rgba(0,0,0,0.6),
+    0 0 0 1px rgba(0,0,0,0.4),
+    0 0 6px rgba(176,58,46,0.4);
+  transform: translateX(-50%);
+}
+.card .ttl{
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 12px;
+  line-height: 1.15;
+  color: var(--ink);
+  margin-bottom: 4px;
+  letter-spacing: 0;
+}
+.card .meta{
+  display:flex; justify-content:space-between;
+  color: var(--ink-soft);
+  font-size: 7px; letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+/* card hover — picked up */
+.card:hover{
+  transform: translate(var(--tx,0), var(--ty,0)) rotate(0deg) translateZ(20px) scale(1.06) !important;
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.2),
+    0 18px 28px rgba(0,0,0,0.7),
+    0 38px 60px rgba(0,0,0,0.45),
+    0 0 24px rgba(200,169,126,0.18);
+  filter: brightness(1.06);
+  z-index: 20;
+}
+
+/* zoomed wall — pulled forward */
+.wall.zoomed{
+  transform: scale(1.6) translateZ(160px);
+  z-index: 30;
+  box-shadow:
+    inset 0 0 0 1px rgba(232,202,160,0.18),
+    inset 0 -60px 90px rgba(0,0,0,0.5),
+    0 40px 90px rgba(0,0,0,0.7),
+    0 0 60px rgba(200,169,126,0.10);
+}
+.wall.dimmed{
+  filter: blur(4px) brightness(0.45) saturate(0.7);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* close hint when zoomed */
+.zoom-hint{
+  position:absolute; left:50%; bottom:18px;
+  transform: translateX(-50%);
+  font-family: var(--mono); font-size: 9px;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--tungsten);
+  opacity: 0; pointer-events:none;
+  z-index: 60;
+  transition: opacity 400ms ease;
+}
+.zoom-hint.show{ opacity: 0.7; }
+.zoom-hint .key{
+  border:1px solid rgba(200,169,126,0.35);
+  padding: 2px 6px; margin-right: 6px;
+  border-radius: 2px;
+}
+
+/* =============================================================
+   TODO_TONIGHT — right edge, vertical pinboard
+============================================================= */
+.todo{
+  grid-column: 2 / 3;
+  grid-row: 2 / 3;
+  margin-left: 14px;
+  position:relative;
+  background:
+    linear-gradient(180deg, rgba(200,169,126,0.04), transparent 30%),
+    var(--cork);
+  border: 1px solid rgba(200,169,126,0.10);
+  border-radius: 2px;
+  padding: 30px 14px 18px;
+  box-shadow:
+    inset 0 0 0 1px rgba(0,0,0,0.45),
+    inset 0 -30px 50px rgba(0,0,0,0.5),
+    0 8px 22px rgba(0,0,0,0.55);
+  display:flex; flex-direction: column; gap: 10px;
+  opacity:0;
+  transform: translateX(20px);
+  transition: opacity 800ms ease, transform 800ms cubic-bezier(.22,.61,.36,1);
+}
+.todo.lit{ opacity:1; transform: translateX(0); }
+.todo::before{
+  content:""; position:absolute; inset:0;
+  background:
+    repeating-linear-gradient(0deg, var(--cork-line-2) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(90deg, var(--cork-line-2) 0 1px, transparent 1px 7px);
+  pointer-events:none;
+}
+.todo .head{
+  font-family: var(--mono);
+  font-size: 9px; letter-spacing: 0.28em;
+  color: var(--tungsten);
+  text-transform: uppercase;
+  position:absolute; top:10px; left:14px;
+}
+.todo .head .red{
+  display:inline-block; width:5px; height:5px; border-radius:50%;
+  background: var(--pin-red-hi);
+  box-shadow: 0 0 6px rgba(214,88,72,0.7);
+  margin-right: 6px; vertical-align: middle;
+}
+.todo .count{
+  position:absolute; top:10px; right:14px;
+  font-family: var(--mono); font-size:9px;
+  color: var(--tungsten-lo); letter-spacing:0.2em;
+}
+
+.todo-card{
+  position:relative;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 9px 10px 9px 14px;
+  border-left: 3px solid var(--pin-red);
+  font-family: var(--serif);
+  font-size: 13px; line-height: 1.2;
+  font-style: italic;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.4) inset,
+    0 4px 8px rgba(0,0,0,0.45),
+    0 10px 18px rgba(0,0,0,0.3);
+  border-radius: 1px;
+  cursor: pointer;
+  transition: transform 220ms ease, box-shadow 220ms ease;
+}
+.todo-card:hover{
+  transform: translateX(-3px) translateY(-1px);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.4) inset,
+    0 8px 16px rgba(0,0,0,0.6),
+    0 18px 30px rgba(0,0,0,0.35);
+}
+.todo-card .when{
+  display:block;
+  font-family: var(--mono); font-style: normal;
+  font-size: 8px; letter-spacing: 0.2em;
+  color: var(--ink-soft); text-transform: uppercase;
+  margin-top: 4px; opacity: 0.8;
+}
+
+/* =============================================================
+   INBOX TABLE — bottom 25%, wooden, chaotic
+============================================================= */
+.inbox{
+  grid-column: 1 / -1;
+  grid-row: 3 / 4;
+  height: 215px;
+  margin-top: 14px;
+  position:relative;
+  border-radius: 2px;
+  border: 1px solid rgba(200,169,126,0.10);
+  background:
+    /* wood plank */
+    linear-gradient(180deg, rgba(200,169,126,0.06), transparent 22%),
+    repeating-linear-gradient(90deg,
+      rgba(0,0,0,0.18) 0 1px, transparent 1px 280px),
+    repeating-linear-gradient(0deg,
+      var(--wood-grain) 0 1px, transparent 1px 9px,
+      rgba(120,80,40,0.04) 9px 10px, transparent 10px 19px),
+    linear-gradient(180deg, #221710, #14100a);
+  box-shadow:
+    inset 0 1px 0 rgba(232,202,160,0.07),
+    inset 0 -50px 80px rgba(0,0,0,0.55),
+    0 -10px 30px rgba(0,0,0,0.5);
+  overflow:hidden;
+  opacity:0;
+  transform: translateY(20px);
+  transition: opacity 900ms ease, transform 900ms cubic-bezier(.22,.61,.36,1);
+}
+.inbox.lit{ opacity:1; transform: translateY(0); }
+
+.inbox .head{
+  position:absolute; top:10px; left:18px;
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 0.28em; color: var(--tungsten);
+  text-transform: uppercase;
+  z-index: 5;
+}
+.inbox .head em{
+  font-family: var(--serif); font-style: italic;
+  font-size: 11px; color: var(--paper-2);
+  text-transform: none; letter-spacing: 0.02em;
+  margin-left: 10px; opacity: 0.75;
+}
+.inbox .count{
+  position:absolute; top:10px; right:18px;
+  font-family: var(--mono); font-size: 10px;
+  letter-spacing: 0.2em; color: var(--tungsten-lo);
+  z-index: 5;
+}
+.inbox .hint{
+  position:absolute; bottom:10px; left:18px;
+  font-family: var(--mono); font-size: 8px;
+  letter-spacing: 0.2em; color: var(--tungsten-lo);
+  text-transform: uppercase; opacity: 0.55;
+  z-index: 5;
+}
+
+.inbox-items{
+  position:absolute; inset: 38px 16px 26px 16px;
+}
+.inbox-item{
+  position:absolute;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 7px 10px 8px;
+  width: 138px;
+  font-family: var(--mono);
+  font-size: 8px; letter-spacing: 0.04em;
+  line-height: 1.3;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.4) inset,
+    0 6px 12px rgba(0,0,0,0.55),
+    0 14px 22px rgba(0,0,0,0.3);
+  border-radius: 1px;
+  cursor: grab;
+  user-select: none;
+  transition: box-shadow 220ms ease, filter 220ms ease;
+  will-change: transform, left, top;
+}
+.inbox-item.tone-2{ background: var(--paper-2); }
+.inbox-item.tone-3{ background: var(--paper-3); }
+.inbox-item:active{ cursor: grabbing; }
+.inbox-item:hover{
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.5) inset,
+    0 10px 18px rgba(0,0,0,0.7),
+    0 22px 38px rgba(0,0,0,0.35),
+    0 0 20px rgba(200,169,126,0.15);
+  filter: brightness(1.05);
+  z-index: 25;
+}
+.inbox-item .ttl{
+  font-family: var(--serif); font-style: italic;
+  font-size: 13px; color: var(--ink); line-height: 1.15;
+  margin-bottom: 4px;
+}
+.inbox-item .src{
+  display:flex; justify-content:space-between;
+  font-size: 7px; letter-spacing: 0.16em;
+  color: var(--ink-soft); text-transform: uppercase;
+  opacity: 0.75;
+}
+.inbox-item.dragging{
+  z-index: 100; cursor: grabbing;
+  box-shadow:
+    0 0 0 1px rgba(0,0,0,0.25),
+    0 24px 40px rgba(0,0,0,0.7),
+    0 50px 80px rgba(0,0,0,0.4),
+    0 0 30px rgba(200,169,126,0.25);
+}
+
+/* card flying from inbox to wall */
+.flyer{
+  position: fixed;
+  z-index: 90;
+  pointer-events: none;
+}
+
+/* =============================================================
+   DUST PARTICLES
+============================================================= */
+.dust{
+  position:absolute; inset:0; pointer-events:none; z-index: 4;
+  overflow:hidden;
+}
+.mote{
+  position:absolute;
+  width: 2px; height: 2px; border-radius: 50%;
+  background: rgba(232,202,160,0.55);
+  box-shadow: 0 0 4px rgba(232,202,160,0.45);
+  bottom: -4px;
+  animation: float-up linear infinite;
+  opacity: 0;
+}
+@keyframes float-up{
+  0%   { transform: translate(0,0) scale(0.6); opacity: 0; }
+  10%  { opacity: var(--peak, 0.6); }
+  60%  { opacity: var(--peak, 0.6); }
+  100% { transform: translate(var(--dx, 30px), calc(var(--dy, -1000px))) scale(1.1); opacity: 0; }
+}
+
+/* tiny status line in upper right */
+.status{
+  position:fixed; top:14px; right:24px;
+  font-family: var(--mono);
+  font-size: 9px; letter-spacing: 0.22em;
+  color: var(--tungsten-lo);
+  text-transform: uppercase;
+  z-index: 80;
+  display:flex; gap: 18px;
+  opacity: 0;
+  transition: opacity 800ms ease 300ms;
+}
+.status.lit{ opacity: 0.7; }
+.status .live{ color: var(--tungsten); }
+.status .live::before{
+  content:""; display:inline-block; width:5px; height:5px; border-radius:50%;
+  background: var(--tungsten-hi); margin-right: 6px;
+  box-shadow: 0 0 6px var(--tungsten-hi);
+  vertical-align: 1px;
+  animation: pulse 2.4s ease-in-out infinite;
+}
+@keyframes pulse{
+  0%,100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* before-room state: pure black */
+body.pre-room{ background: #000; }
+.room.pre{ background: #000; }
+.room.pre .stage, .room.pre .beam{ opacity: 0; }
+.stage, .beam, .dust, .status{ transition: opacity 700ms ease; }
+.stage{ opacity: 0; }
+.stage.lit{ opacity: 1; }
+.beam{ opacity: 0; }
+.beam.lit{ opacity: 1; }
+.dust{ opacity: 0; }
+.dust.lit{ opacity: 1; }
+
+</style>
+</head>
+<body class="pre-room">
+
+<div class="room pre" id="room">
+  <div class="beam" id="beam"></div>
+  <div class="dust" id="dust"></div>
+
+  <!-- pin of light: the entry -->
+  <div class="pin-of-light" id="pin"></div>
+
+  <div class="stage" id="stage">
+    <header class="room-head">
+      <div class="mark">the room <span class="amp">·</span> <em>luca</em></div>
+      <div class="meta">
+        <span>tue 29 apr <span class="dot">·</span> 23:14</span>
+        <span>last touched <span class="dot">·</span> <em style="font-family:var(--serif);font-style:italic;color:var(--paper-2);text-transform:none;letter-spacing:0">cold opens that don't feel cold</em></span>
+      </div>
+    </header>
+
+    <div class="walls" id="walls"></div>
+
+    <aside class="todo" id="todo">
+      <div class="head"><span class="red"></span>todo · tonight</div>
+      <div class="count" id="todo-count">0</div>
+    </aside>
+
+    <section class="inbox" id="inbox">
+      <div class="head">_inbox <em>— things not yet sorted</em></div>
+      <div class="count" id="inbox-count">0</div>
+      <div class="hint">drag onto a wall to file</div>
+      <div class="inbox-items" id="inbox-items"></div>
+    </section>
+  </div>
+
+  <div class="zoom-hint" id="zoom-hint"><span class="key">esc</span> back to the room</div>
+  <div class="status" id="status">
+    <span class="live">room · live</span>
+    <span>idx 1,247 cards</span>
+    <span>9 walls</span>
+  </div>
+</div>
+
+<script>
+/* =============================================================
+   DATA — walls, cards, inbox, todo
+============================================================= */
+const WALLS = [
+  { id:"war",   name:"WAR ROOM",     num:"01",
+    cards:[
+      {t:"Q3 launch · go/no-go", m:"plan · 4d"},
+      {t:"the pricing knot",     m:"open · 11"},
+      {t:"who owns retention",   m:"thread · 6"},
+      {t:"what we shipped wk17", m:"log · today"},
+      {t:"the awkward call",     m:"prep · fri"},
+    ]},
+  { id:"swipe", name:"SWIPE",        num:"02",
+    cards:[
+      {t:"linear's empty state", m:"img · 02-12"},
+      {t:"that nyt scrollytell", m:"link"},
+      {t:"raycast cmd-k feel",   m:"vid · 0:14"},
+      {t:"old penguin covers",   m:"set · 12"},
+      {t:"granola's quiet ui",   m:"shot"},
+      {t:"airbnb 2014 hero",     m:"archive"},
+    ]},
+  { id:"intel", name:"INTEL",        num:"03",
+    cards:[
+      {t:"what bryce is shipping", m:"src · gh"},
+      {t:"perplexity earnings",    m:"q1 · pdf"},
+      {t:"a16z infra take",        m:"essay"},
+      {t:"competitor wk diff",     m:"auto"},
+    ]},
+  { id:"play",  name:"PLAYBOOKS",    num:"04",
+    cards:[
+      {t:"how to run a 1:1",     m:"draft v3"},
+      {t:"shipping on fridays",  m:"rule"},
+      {t:"the 5-line memo",      m:"template"},
+      {t:"interviewing sr eng",  m:"loop"},
+      {t:"saying no, kindly",    m:"script"},
+    ]},
+  { id:"lev",   name:"LEVERAGE",     num:"05",
+    cards:[
+      {t:"what i delegate",      m:"list"},
+      {t:"automations · zapier", m:"7 live"},
+      {t:"who answers what",     m:"matrix"},
+      {t:"the friday review",    m:"loop"},
+    ]},
+  { id:"tech",  name:"TECH",         num:"06",
+    cards:[
+      {t:"sqlite full-text", m:"notes"},
+      {t:"htmx vs alpine",   m:"compare"},
+      {t:"deno deploy edge", m:"trial"},
+      {t:"prompt cache cost",m:"calc"},
+      {t:"vector db mvp",    m:"sketch"},
+      {t:"crdts, finally",   m:"reading"},
+    ]},
+  { id:"voi",   name:"VOICES",       num:"07",
+    cards:[
+      {t:"naval · on judgment", m:"clip"},
+      {t:"patrick c · letters", m:"set"},
+      {t:"basecamp shape up",   m:"book"},
+      {t:"didion on notebooks", m:"essay"},
+    ]},
+  { id:"con",   name:"CONVERSATIONS",num:"08",
+    cards:[
+      {t:"with mara · saturday",  m:"notes"},
+      {t:"intro · sam → priya",   m:"sent"},
+      {t:"the cofounder talk",    m:"draft"},
+      {t:"reply to dad",          m:"owe · 6d"},
+      {t:"thank-yous backlog",    m:"3 left"},
+    ]},
+  { id:"misc",  name:"MISC",         num:"09",
+    cards:[
+      {t:"birthday list · may",  m:"check"},
+      {t:"the kettle thing",     m:"order"},
+      {t:"plant watering",       m:"sat"},
+      {t:"books to lend out",    m:"4"},
+    ]},
+];
+
+const INBOX = [
+  {t:"voice memo · 3:42 — \"the pricing thing\"", s:"voice · 22:18", suggest:"war"},
+  {t:"screenshot · stripe's new dunning flow",   s:"img · 21:50", suggest:"swipe"},
+  {t:"link · ben thompson on agents",            s:"safari · 20:04", suggest:"voi"},
+  {t:"email from priya re: q3",                  s:"gmail · 18:31", suggest:"con"},
+  {t:"random thought · \"what if onboarding was a letter\"", s:"capture · 17:02", suggest:"play"},
+  {t:"tweet · @patio11 on tax for founders",     s:"x · 14:55", suggest:"intel"},
+  {t:"pdf · raise letter draft v2",              s:"drop · 12:40", suggest:"war"},
+  {t:"photo of whiteboard · roadmap",            s:"img · 11:20", suggest:"war"},
+  {t:"clip · raycast 1.7 release notes",         s:"link · 10:08", suggest:"swipe"},
+  {t:"note · \"ask dad about the trip\"",        s:"capture · 09:15", suggest:"con"},
+  {t:"snippet · python redis pipeline",          s:"code · 08:44", suggest:"tech"},
+  {t:"podcast · acquired · sequoia ep",          s:"link · yest", suggest:"voi"},
+];
+
+const TODO = [
+  { t:"finish the q3 memo",  when:"by 23:59"},
+  { t:"reply to mara",       when:"owed 2d"},
+  { t:"file the stripe pdf", when:"5 min"},
+  { t:"pick swipe of the week", when:"weekly"},
+  { t:"say goodnight to dad",   when:"before bed"},
+];
+
+/* =============================================================
+   RENDER
+============================================================= */
+const wallsEl  = document.getElementById('walls');
+const inboxEl  = document.getElementById('inbox-items');
+const todoEl   = document.getElementById('todo');
+const todoCountEl  = document.getElementById('todo-count');
+const inboxCountEl = document.getElementById('inbox-count');
+
+// Random helper with seed-ish stability
+function rand(min,max){ return min + Math.random()*(max-min); }
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function tone(i){ return ['', 'tone-2', 'tone-3'][i % 3]; }
+
+// Render walls
+WALLS.forEach((w, wi) => {
+  const wall = document.createElement('div');
+  wall.className = 'wall';
+  wall.dataset.wallId = w.id;
+  wall.dataset.idx = wi;
+  wall.innerHTML = `
+    <div class="label"><span class="num">${w.num}</span>${w.name}</div>
+    <div class="count">${w.cards.length}</div>
+  `;
+  // place cards in a loose grid within the wall, slightly randomized
+  const cols = w.cards.length <= 4 ? 2 : 3;
+  const rows = Math.ceil(w.cards.length/cols);
+  w.cards.forEach((c, ci) => {
+    const card = document.createElement('div');
+    const r = ci % cols;
+    const row = Math.floor(ci/cols);
+    const padX = 14, padY = 28;
+    // available area expressed as % so it scales with wall
+    const cellW = (100 - 8) / cols;
+    const cellH = (100 - 18) / rows;
+    const baseX = padX/3 + r*cellW + rand(-2, 2);
+    const baseY = padY/3 + row*cellH + rand(-1.5, 1.5);
+    const rot = rand(-4.2, 4.2);
+    card.className = `card ${tone(ci+wi)} ${ci%4===3?'wide':''}`;
+    card.style.left = `${baseX}%`;
+    card.style.top  = `${baseY}%`;
+    card.style.transform = `rotate(${rot.toFixed(2)}deg)`;
+    card.dataset.rot = rot.toFixed(2);
+    card.innerHTML = `
+      <div class="pin"></div>
+      <div class="ttl">${c.t}</div>
+      <div class="meta"><span>${w.id}</span><span>${c.m}</span></div>
+    `;
+    wall.appendChild(card);
+  });
+  wallsEl.appendChild(wall);
+});
+
+// Render inbox items — chaotic placement
+function layoutInbox(){
+  const items = [...inboxEl.children];
+  const W = inboxEl.clientWidth || 1100;
+  const H = inboxEl.clientHeight || 150;
+  items.forEach((el, i) => {
+    if (el.dataset.placed) return;
+    const cardW = 138, cardH = 56;
+    const cols = Math.max(5, Math.floor(W / 150));
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = (W / cols) * col + rand(-12, 12);
+    const y = row * 32 + rand(-6, 14);
+    const rot = rand(-7, 7);
+    el.style.left = `${Math.max(0, Math.min(W - cardW, x))}px`;
+    el.style.top  = `${Math.max(0, Math.min(H - cardH, y))}px`;
+    el.style.transform = `rotate(${rot}deg)`;
+    el.dataset.rot = rot;
+    el.dataset.placed = '1';
+  });
+}
+
+INBOX.forEach((it, i) => {
+  const el = document.createElement('div');
+  el.className = `inbox-item ${tone(i+1)}`;
+  el.dataset.suggest = it.suggest;
+  el.innerHTML = `
+    <div class="ttl">${it.t}</div>
+    <div class="src"><span>${it.s}</span><span>→ ${(WALLS.find(w=>w.id===it.suggest)||{name:'?'}).name.toLowerCase()}</span></div>
+  `;
+  inboxEl.appendChild(el);
+});
+inboxCountEl.textContent = INBOX.length + ' unsorted';
+
+// Render todo
+TODO.forEach((t,i) => {
+  const c = document.createElement('div');
+  c.className = 'todo-card';
+  c.innerHTML = `${t.t}<span class="when">${t.when}</span>`;
+  todoEl.appendChild(c);
+});
+todoCountEl.textContent = String(TODO.length).padStart(2,'0');
+
+// Defer inbox layout until after render measures
+requestAnimationFrame(()=>requestAnimationFrame(layoutInbox));
+window.addEventListener('resize', ()=>{
+  // re-layout: clear placement
+  [...inboxEl.children].forEach(el => delete el.dataset.placed);
+  layoutInbox();
+});
+
+/* =============================================================
+   DUST
+============================================================= */
+const dustEl = document.getElementById('dust');
+const MOTE_COUNT = 16;
+for (let i=0; i<MOTE_COUNT; i++){
+  const m = document.createElement('div');
+  m.className = 'mote';
+  const left = rand(15, 85);
+  const dur  = rand(11, 22);
+  const delay= rand(0, 16);
+  const dx   = rand(-50, 50);
+  const peak = rand(0.25, 0.7);
+  const size = rand(1.2, 2.6);
+  m.style.left = `${left}%`;
+  m.style.width = m.style.height = `${size}px`;
+  m.style.setProperty('--dx', `${dx}px`);
+  m.style.setProperty('--dy', `-${window.innerHeight + 60}px`);
+  m.style.setProperty('--peak', peak.toFixed(2));
+  m.style.animationDuration = `${dur}s`;
+  m.style.animationDelay = `${delay}s`;
+  dustEl.appendChild(m);
+}
+
+/* =============================================================
+   ENTRY SEQUENCE — orchestrated
+   t=0      black
+   t=200    pin breathing
+   t=2000   iris opens (1500ms)
+   t=2400   room lit, beam
+   t=2700+  walls stagger L→R, 120ms apart (3 cols × 3 rows by column)
+   t=3500+  cards on each wall fade-in + sharpen, 40ms each
+   t=4400   inbox table materializes
+   t=4700   todo pinboard slides in
+   t=5000   status line
+============================================================= */
+const room = document.getElementById('room');
+const beam = document.getElementById('beam');
+const stage= document.getElementById('stage');
+const pin  = document.getElementById('pin');
+const status= document.getElementById('status');
+
+function lightWalls(){
+  // stagger column-by-column, left to right
+  const wallEls = [...wallsEl.querySelectorAll('.wall')];
+  // wallEls index: 0,1,2 row0  ; 3,4,5 row1 ; 6,7,8 row2
+  // column-major reveal: col 0 -> 0,3,6 ; col 1 -> 1,4,7 ; col 2 -> 2,5,8
+  const order = [0,3,6, 1,4,7, 2,5,8];
+  order.forEach((idx, i) => {
+    setTimeout(() => {
+      wallEls[idx].classList.add('lit');
+      // light cards on this wall, staggered
+      const cards = wallEls[idx].querySelectorAll('.card');
+      cards.forEach((c, ci) => {
+        setTimeout(()=> c.classList.add('lit'), 280 + ci*45);
+      });
+    }, i * 130);
+  });
+}
+
+function runEntry(){
+  // pin already breathing via CSS
+  setTimeout(()=>{
+    pin.classList.add('iris');
+  }, 1800);
+
+  setTimeout(()=>{
+    document.body.classList.remove('pre-room');
+    room.classList.remove('pre');
+    room.classList.add('lit');
+    beam.classList.add('lit');
+    stage.classList.add('lit');
+    dustEl.classList.add('lit');
+  }, 2300);
+
+  setTimeout(lightWalls, 2700);
+
+  setTimeout(()=>{
+    document.getElementById('inbox').classList.add('lit');
+  }, 4400);
+
+  setTimeout(()=>{
+    todoEl.classList.add('lit');
+    // light todo cards in sequence
+    [...todoEl.querySelectorAll('.todo-card')].forEach((c,i)=>{
+      c.style.opacity = 0;
+      c.style.transform = 'translateX(8px)';
+      c.style.transition = 'opacity 500ms ease, transform 500ms cubic-bezier(.22,.61,.36,1)';
+      setTimeout(()=>{
+        c.style.opacity = 1;
+        c.style.transform = 'translateX(0)';
+      }, 100 + i*90);
+    });
+  }, 4700);
+
+  setTimeout(()=>{
+    status.classList.add('lit');
+    // remove pin entirely after iris finished
+    pin.remove();
+  }, 5000);
+}
+runEntry();
+
+/* =============================================================
+   WALL ZOOM — perspective
+============================================================= */
+const zoomHint = document.getElementById('zoom-hint');
+let zoomedWall = null;
+
+function zoomTo(wall){
+  if (zoomedWall) return;
+  zoomedWall = wall;
+  const wallEls = [...wallsEl.querySelectorAll('.wall')];
+  // compute translate to bring wall toward center of walls grid
+  const gridRect = wallsEl.getBoundingClientRect();
+  const wRect = wall.getBoundingClientRect();
+  const cx = gridRect.left + gridRect.width/2;
+  const cy = gridRect.top  + gridRect.height/2;
+  const dx = cx - (wRect.left + wRect.width/2);
+  const dy = cy - (wRect.top  + wRect.height/2);
+  wall.style.transform = `translate(${dx}px, ${dy}px) scale(1.55) translateZ(140px)`;
+  wall.classList.add('zoomed');
+  wallEls.forEach(w => { if (w !== wall) w.classList.add('dimmed'); });
+  zoomHint.classList.add('show');
+}
+
+function unzoom(){
+  if (!zoomedWall) return;
+  const wallEls = [...wallsEl.querySelectorAll('.wall')];
+  zoomedWall.style.transform = '';
+  zoomedWall.classList.remove('zoomed');
+  wallEls.forEach(w => w.classList.remove('dimmed'));
+  zoomHint.classList.remove('show');
+  zoomedWall = null;
+}
+
+wallsEl.addEventListener('click', (e) => {
+  // ignore clicks on cards inside the wall
+  if (e.target.closest('.card')){
+    // card click — quick "lift" feedback only
+    return;
+  }
+  const wall = e.target.closest('.wall');
+  if (!wall) return;
+  if (zoomedWall && wall === zoomedWall) {
+    unzoom(); return;
+  }
+  if (zoomedWall) { unzoom(); }
+  zoomTo(wall);
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') unzoom();
+});
+
+/* =============================================================
+   INBOX DRAG → arc to wall
+============================================================= */
+let drag = null;
+
+inboxEl.addEventListener('pointerdown', (e) => {
+  const item = e.target.closest('.inbox-item');
+  if (!item) return;
+  e.preventDefault();
+  const rect = item.getBoundingClientRect();
+  drag = {
+    el: item,
+    offX: e.clientX - rect.left,
+    offY: e.clientY - rect.top,
+    startRot: parseFloat(item.dataset.rot || '0'),
+    suggest: item.dataset.suggest,
+  };
+  item.classList.add('dragging');
+  item.style.position = 'fixed';
+  item.style.left = `${rect.left}px`;
+  item.style.top  = `${rect.top}px`;
+  item.style.transform = `rotate(${drag.startRot}deg)`;
+  // detach from inbox to body
+  document.body.appendChild(item);
+  item.setPointerCapture(e.pointerId);
+});
+
+document.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  drag.el.style.left = `${e.clientX - drag.offX}px`;
+  drag.el.style.top  = `${e.clientY - drag.offY}px`;
+  // detect wall under pointer for glow
+  const under = document.elementFromPoint(e.clientX, e.clientY);
+  const wall = under ? under.closest('.wall') : null;
+  document.querySelectorAll('.wall.drop-target').forEach(w => {
+    if (w !== wall) w.classList.remove('drop-target');
+  });
+  if (wall) wall.classList.add('drop-target');
+});
+
+document.addEventListener('pointerup', (e) => {
+  if (!drag) return;
+  const under = document.elementFromPoint(e.clientX, e.clientY);
+  const wall  = under ? under.closest('.wall') : null;
+  document.querySelectorAll('.wall.drop-target').forEach(w => w.classList.remove('drop-target'));
+
+  if (wall){
+    flyToWall(drag.el, wall);
+  } else {
+    // return to inbox
+    returnToInbox(drag.el);
+  }
+  drag = null;
+});
+
+function flyToWall(item, wall){
+  // animate the item along a quadratic-ish arc into the wall, then pin it.
+  const itemRect = item.getBoundingClientRect();
+  const wallRect = wall.getBoundingClientRect();
+  // pick a random spot inside the wall (avoiding label area)
+  const tx = wallRect.left + rand(20, wallRect.width - 120);
+  const ty = wallRect.top  + rand(40, wallRect.height - 60);
+
+  // build keyframes: arc by inserting a midpoint above the line
+  const sx = itemRect.left, sy = itemRect.top;
+  const mx = (sx + tx)/2;
+  const my = Math.min(sy, ty) - 120;
+
+  const finalRot = rand(-4, 4);
+  const item2 = item;
+  item2.classList.remove('dragging');
+  item2.style.zIndex = 95;
+
+  const anim = item2.animate([
+    { left: `${sx}px`, top: `${sy}px`, transform: `rotate(${parseFloat(item2.dataset.rot||0)}deg) scale(1)`, easing: 'cubic-bezier(.4,.0,.2,1)' },
+    { left: `${mx}px`, top: `${my}px`, transform: `rotate(${(finalRot*1.5).toFixed(1)}deg) scale(1.08)`, offset: 0.55 },
+    { left: `${tx}px`, top: `${ty}px`, transform: `rotate(${finalRot.toFixed(1)}deg) scale(0.86)` },
+  ], { duration: 720, easing: 'cubic-bezier(.42,.0,.58,1)', fill: 'forwards' });
+
+  anim.onfinish = () => {
+    // micro-bounce + convert into pinned wall card
+    pinIntoWall(item2, wall, finalRot);
+  };
+}
+
+function pinIntoWall(item, wall, finalRot){
+  const wallRect = wall.getBoundingClientRect();
+  const itemRect = item.getBoundingClientRect();
+  // px → percent within the wall
+  const xPct = ((itemRect.left - wallRect.left) / wallRect.width) * 100;
+  const yPct = ((itemRect.top  - wallRect.top ) / wallRect.height) * 100;
+
+  // build a wall card
+  const ttl = item.querySelector('.ttl').textContent;
+  const src = item.querySelectorAll('.src span')[0].textContent;
+  const card = document.createElement('div');
+  card.className = `card ${item.classList.contains('tone-2') ? 'tone-2' : item.classList.contains('tone-3') ? 'tone-3' : ''}`;
+  card.style.left = `${xPct}%`;
+  card.style.top  = `${yPct}%`;
+  card.style.transform = `rotate(${finalRot}deg)`;
+  card.dataset.rot = finalRot;
+  card.innerHTML = `
+    <div class="pin"></div>
+    <div class="ttl">${ttl.length > 38 ? ttl.slice(0,36)+'…' : ttl}</div>
+    <div class="meta"><span>${wall.dataset.wallId}</span><span>${src}</span></div>
+  `;
+  card.classList.add('lit');
+  // micro-bounce
+  card.animate([
+    { transform: `rotate(${finalRot}deg) scale(0.86)` },
+    { transform: `rotate(${finalRot}deg) scale(1.08)` },
+    { transform: `rotate(${finalRot}deg) scale(1.0)` },
+  ], { duration: 280, easing: 'cubic-bezier(.42,.0,.58,1)' });
+
+  wall.appendChild(card);
+  // update wall count
+  const countEl = wall.querySelector('.count');
+  if (countEl) countEl.textContent = parseInt(countEl.textContent||'0',10) + 1;
+  // soft amber pulse on the wall
+  wall.animate([
+    { boxShadow: 'inset 0 0 0 1px rgba(232,202,160,0.6), inset 0 0 80px rgba(232,202,160,0.22), 0 8px 22px rgba(0,0,0,0.55)' },
+    { boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.4), inset 0 -40px 60px rgba(0,0,0,0.45), 0 8px 22px rgba(0,0,0,0.55)' },
+  ], { duration: 700, easing: 'ease-out' });
+
+  // remove the flying inbox item
+  item.remove();
+  // update inbox count
+  inboxCountEl.textContent = (inboxEl.children.length) + ' unsorted';
+}
+
+function returnToInbox(item){
+  // smoothly return the item to inbox at a fresh chaotic position
+  const inboxRect = inboxEl.getBoundingClientRect();
+  const tx = inboxRect.left + rand(20, inboxRect.width - 160);
+  const ty = inboxRect.top  + rand(10, Math.max(20, inboxRect.height - 60));
+  const rot = rand(-7, 7);
+  item.classList.remove('dragging');
+  const sx = parseFloat(item.style.left);
+  const sy = parseFloat(item.style.top);
+  const anim = item.animate([
+    { left: `${sx}px`, top: `${sy}px`, transform: `rotate(${parseFloat(item.dataset.rot||0)}deg)` },
+    { left: `${tx}px`, top: `${ty}px`, transform: `rotate(${rot}deg)` },
+  ], { duration: 480, easing: 'cubic-bezier(.42,.0,.58,1)', fill: 'forwards' });
+  anim.onfinish = () => {
+    // re-attach to inbox-items, position relative to it
+    inboxEl.appendChild(item);
+    item.style.position = 'absolute';
+    item.style.left = `${tx - inboxRect.left}px`;
+    item.style.top  = `${ty - inboxRect.top}px`;
+    item.style.transform = `rotate(${rot}deg)`;
+    item.dataset.rot = rot;
+  };
+}
+
+/* =============================================================
+   CARD HOVER — tilt-correct toward flat (CSS handles lift; we
+   override transform to flatten rotation)
+============================================================= */
+wallsEl.addEventListener('mouseover', (e) => {
+  const card = e.target.closest('.card');
+  if (!card) return;
+  // store original rotation already in dataset.rot; set CSS var
+  card.style.setProperty('--orig-rot', `${card.dataset.rot}deg`);
+});
+wallsEl.addEventListener('mouseout', (e) => {
+  const card = e.target.closest('.card');
+  if (!card) return;
+  card.style.transform = `rotate(${card.dataset.rot}deg)`;
+});
+// override hover transform via JS so we keep dataset rotation when un-hovered
+wallsEl.addEventListener('mousemove', (e) => {
+  const card = e.target.closest('.card');
+  if (!card) return;
+  // tilt-correct: ease toward 0deg while lifted
+  card.style.transform = `rotate(${(parseFloat(card.dataset.rot)*0.15).toFixed(2)}deg) translateZ(20px) scale(1.06)`;
+});
+
+</script>
+</body>
+</html>
