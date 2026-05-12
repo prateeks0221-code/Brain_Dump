@@ -64,4 +64,31 @@ async function generateSummaryAndTags(text) {
   }
 }
 
-module.exports = { transcribeAudio, generateSummaryAndTags };
+async function generateL2Context(ogDescription) {
+  const ai = getGemini();
+  if (!ai || !ogDescription) return null;
+  try {
+    const result = await ai.models.generateContent({
+      model: 'gemini-2.0-flash-lite',
+      contents: [
+        {
+          parts: [
+            {
+              text: `You are a semantic intelligence layer. Given an OG description from a webpage, extract 2-3 crisp insight bullets representing the deeper context, intent, or significance of this content. Be analytical and action-oriented — one level deeper than the surface summary.\n\nOG Description: "${ogDescription.slice(0, 1000)}"\n\nReturn valid JSON with key: insights (array of 2-3 strings, each under 120 chars).`,
+            },
+          ],
+        },
+      ],
+      generationConfig: { responseMimeType: 'application/json' },
+    });
+    const raw = result.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+    const parsed = JSON.parse(raw);
+    logger.info('AI: L2 context generated');
+    return Array.isArray(parsed.insights) ? parsed.insights : null;
+  } catch (err) {
+    logger.error(`AI: L2 context failed — ${err.message}`);
+    return null;
+  }
+}
+
+module.exports = { transcribeAudio, generateSummaryAndTags, generateL2Context };

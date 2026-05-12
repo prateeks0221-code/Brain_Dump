@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   ImageIcon, FileText, Link2, Music, Video, File,
   Check, Copy, ExternalLink, Trash2, Maximize2, X,
-  Layers, Unlink,
+  Layers, Unlink, Sparkles, Loader2,
 } from 'lucide-react';
+import { api } from '../lib/api';
 
 /* ─── Type / kind metadata ─────────────────────────────────────── */
 const TYPE_META = {
@@ -107,11 +108,102 @@ function looksLikeMarkdown(item) {
   return /^#{1,6}\s/m.test(text) || /\[[^\]]+\]\([^)]+\)/m.test(text) || /^[-*]\s/m.test(text);
 }
 
+/* ─── L2 Context modal ──────────────────────────────────────────── */
+function L2Modal({ item, onClose }) {
+  const [loading, setLoading] = useState(true);
+  const [insights, setInsights] = useState(null);
+  const [error, setError] = useState(null);
+
+  // Fetch on mount
+  useEffect(() => {
+    let cancelled = false;
+    api.getL2(item.id, item.og_description || item.summary || item.raw_content)
+      .then((d) => { if (!cancelled) { setInsights(d.insights); setLoading(false); } })
+      .catch((e) => { if (!cancelled) { setError(e.message); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [item.id, item.og_description, item.summary, item.raw_content]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.75)' }}
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-md rounded-2xl border p-5"
+        style={{ backgroundColor: '#1a1a1e', borderColor: '#27272a' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Sparkles size={14} style={{ color: '#a78bfa' }} />
+            <span className="text-[11px] font-mono uppercase tracking-widest" style={{ color: '#a78bfa' }}>
+              L2 Context
+            </span>
+          </div>
+          <button onClick={onClose} style={{ color: '#71717a' }} className="hover:text-white transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Source title */}
+        <div className="text-[12px] font-medium mb-3 line-clamp-2" style={{ color: '#e4e4e7' }}>
+          {item.og_title || item.title || '(untitled)'}
+        </div>
+
+        {/* OG description — the raw input */}
+        {(item.og_description || item.summary) && (
+          <div className="text-[11px] leading-relaxed mb-4 p-3 rounded-lg border border-[#27272a] bg-[#0f0f11]" style={{ color: '#71717a' }}>
+            <span className="text-[9px] font-mono uppercase tracking-wider text-[#52525b] block mb-1">Source description</span>
+            {(item.og_description || item.summary).slice(0, 300)}
+          </div>
+        )}
+
+        {/* Gemini insights */}
+        {loading && (
+          <div className="flex items-center gap-2 py-4 justify-center" style={{ color: '#71717a' }}>
+            <Loader2 size={14} className="animate-spin" />
+            <span className="text-[11px] font-mono">Framing context…</span>
+          </div>
+        )}
+
+        {error && (
+          <p className="text-[11px] font-mono py-2" style={{ color: '#f87171' }}>
+            {error}
+          </p>
+        )}
+
+        {insights && (
+          <div className="space-y-2">
+            <span className="text-[9px] font-mono uppercase tracking-wider block mb-2" style={{ color: '#52525b' }}>
+              Semantic insights
+            </span>
+            {insights.map((insight, i) => (
+              <div key={i} className="flex gap-2.5 items-start text-[12px] leading-relaxed" style={{ color: '#d4d4d8' }}>
+                <span className="mt-0.5 shrink-0 text-[10px]" style={{ color: '#a78bfa' }}>◆</span>
+                {insight}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!loading && !error && !insights && (
+          <p className="text-[11px] font-mono py-2" style={{ color: '#71717a' }}>
+            No insights generated — check Gemini quota.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Card component ────────────────────────────────────────────── */
 export default function Card({ item, onMarkRead, onArchive, onAssign, onUnassign, onToggleSelect, selected, storyName }) {
   const [expanded, setExpanded]        = useState(false);
   const [showFullNote, setShowFullNote] = useState(false);
   const [copied, setCopied]            = useState(false);
+  const [showL2, setShowL2]            = useState(false);
 
   const meta = getMeta(item);
   const isComponentIcon =
@@ -142,7 +234,9 @@ export default function Card({ item, onMarkRead, onArchive, onAssign, onUnassign
 
   /* media URLs — Drive content always via proxy */
   const proxyUrl    = driveProxy(item.drive_file_id);
+  // For images: primary = Drive proxy, fallback = og_image (handled via onError)
   const thumbUrl    = isImage ? (proxyUrl || item.og_image) : item.og_image;
+  const thumbFallback = isImage && proxyUrl && item.og_image ? item.og_image : null;
   const audioUrl    = proxyUrl || item.file_url;
   const videoUrl    = proxyUrl || item.file_url;
   const pdfUrl      = proxyUrl;                               // native browser PDF viewer
@@ -209,14 +303,20 @@ export default function Card({ item, onMarkRead, onArchive, onAssign, onUnassign
 
         {/* ── Rich media previews ─────────────────────────────── */}
 
-        {/* Image — streamed from Drive via proxy */}
+        {/* Image — Drive proxy primary, og_image fallback, hide container on total failure */}
         {isImage && thumbUrl && (
           <div className="relative mb-3 rounded-lg overflow-hidden bg-[#0f0f11]">
             <img
               src={thumbUrl} alt=""
               className="w-full h-36 object-cover cursor-zoom-in"
               onClick={() => setExpanded(true)}
-              onError={(e) => { e.target.style.display = 'none'; }}
+              onError={(e) => {
+                if (thumbFallback && e.target.src !== thumbFallback) {
+                  e.target.src = thumbFallback;
+                } else {
+                  e.target.closest('div').style.display = 'none';
+                }
+              }}
             />
             <button
               onClick={() => setExpanded(true)}
@@ -361,18 +461,37 @@ export default function Card({ item, onMarkRead, onArchive, onAssign, onUnassign
           </h3>
         </div>
 
-        {/* Domain / site */}
-        {isLink && (item.og_site || item.link_url) && (
-          <div className="text-[11px] font-mono mb-1.5" style={{ color: '#71717a' }}>
-            {item.og_site || getDomain(item.link_url)}
-          </div>
+        {/* Source link — always-visible clickable chip for any item with a URL */}
+        {(item.link_url || item.file_url) && (
+          <a
+            href={item.link_url || item.file_url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-[10px] font-mono mb-1.5 hover:underline max-w-full truncate"
+            style={{ color: '#60a5fa' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ExternalLink size={9} />
+            {item.og_site || getDomain(item.link_url || item.file_url)}
+          </a>
         )}
 
-        {/* Description */}
+        {/* Description + L2 button */}
         {desc && !isInstagram && !isTwitter && (
-          <p className="text-[11px] leading-relaxed mb-2 line-clamp-3" style={{ color: '#a1a1aa' }}>
-            {desc}
-          </p>
+          <div className="mb-2">
+            <p className="text-[11px] leading-relaxed line-clamp-3" style={{ color: '#a1a1aa' }}>
+              {desc}
+            </p>
+            <button
+              onClick={() => setShowL2(true)}
+              className="inline-flex items-center gap-1 text-[10px] font-mono mt-1.5 px-2 py-0.5 rounded-md border transition-colors hover:border-[#a78bfa] hover:text-[#a78bfa]"
+              style={{ borderColor: '#27272a', color: '#71717a', backgroundColor: '#0f0f11' }}
+              title="Generate L2 semantic context via Gemini"
+            >
+              <Sparkles size={9} />
+              L2 Context
+            </button>
+          </div>
         )}
 
         {/* Raw text / notes / markdown */}
@@ -543,6 +662,9 @@ export default function Card({ item, onMarkRead, onArchive, onAssign, onUnassign
           )}
         </div>
       </div>
+
+      {/* L2 Context modal */}
+      {showL2 && <L2Modal item={item} onClose={() => setShowL2(false)} />}
 
       {/* Image lightbox */}
       {expanded && thumbUrl && (
