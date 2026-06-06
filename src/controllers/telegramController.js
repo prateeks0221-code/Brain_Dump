@@ -124,26 +124,24 @@ async function handleUpdate(req, res) {
 
     // ⑤ All enrichment → queue (fire-and-forget, idempotency-guarded)
 
-    // AI: summary + tags — needs rawContent
-    if (rawContent) {
-      // Audio transcription: happens in enrichment job (not blocking webhook)
-      if ((type === 'audio' || type === 'voice') && !rawContent && buffer && mimeType) {
-        queue.push(`${pageId}:transcribe`, async () => {
-          const transcript = await transcribeAudio(buffer, mimeType);
-          if (transcript) {
-            await patchEmptyFields(pageId, {
-              raw_content: { rich_text: [{ text: { content: transcript.slice(0, 2000) } }] },
-            });
-            // Enqueue AI + link enrichment now that we have text
-            queue.push(`${pageId}:ai`, buildAiEnrichJob(pageId, transcript));
-            queue.push(`${pageId}:link`, buildLinkEnrichJob(pageId, transcript));
-          }
-        });
-      } else {
-        queue.push(`${pageId}:ai`,   buildAiEnrichJob(pageId, rawContent));
-        if (type === 'link' || type === 'text') {
-          queue.push(`${pageId}:link`, buildLinkEnrichJob(pageId, rawContent));
+    // Audio/voice WITHOUT caption → transcribe first, then AI + link enrich
+    if ((type === 'audio' || type === 'voice') && !rawContent && buffer && mimeType) {
+      queue.push(`${pageId}:transcribe`, async () => {
+        const transcript = await transcribeAudio(buffer, mimeType);
+        if (transcript) {
+          await patchEmptyFields(pageId, {
+            raw_content: { rich_text: [{ text: { content: transcript.slice(0, 2000) } }] },
+          });
+          // Enqueue AI + link enrichment now that we have text
+          queue.push(`${pageId}:ai`, buildAiEnrichJob(pageId, transcript));
+          queue.push(`${pageId}:link`, buildLinkEnrichJob(pageId, transcript));
         }
+      });
+    } else if (rawContent) {
+      // Text/link/captioned media → AI + link enrich directly
+      queue.push(`${pageId}:ai`,   buildAiEnrichJob(pageId, rawContent));
+      if (type === 'link' || type === 'text') {
+        queue.push(`${pageId}:link`, buildLinkEnrichJob(pageId, rawContent));
       }
     }
 

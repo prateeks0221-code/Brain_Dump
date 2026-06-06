@@ -1,7 +1,8 @@
 /**
  * Gemini gemini-embedding-001 wrapper.
  * Returns Float32Array of 3072 dims per input string.
- * Concurrent batching — 8 parallel calls per round.
+ * Rate-limit aware: retries on 429 with exponential backoff,
+ * concurrency capped at 4 to stay under free-tier 100 RPM.
  */
 const logger = require('../../utils/logger');
 
@@ -16,39 +17,55 @@ function getClient() {
   return _genai;
 }
 
-// gemini-embedding-001 is the stable embedding model available via @google/genai SDK v1.x
-// text-embedding-004 is NOT accessible via this SDK (v1beta endpoint only, different SDK)
 const EMBED_MODEL = 'gemini-embedding-001';
+const MAX_RETRIES = 3;
+
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 /**
- * Embed a single string. Returns Float32Array (3072 dims) or null on failure.
+ * Embed a single string with retry on 429.
+ * Returns Float32Array (3072 dims) or null on failure.
  */
 async function embedText(text) {
   if (!text || typeof text !== 'string') return null;
-  try {
-    const ai     = getClient();
-    const result = await ai.models.embedContent({
-      model:    EMBED_MODEL,
-      contents: text.slice(0, 2000), // 'contents' param, not 'content'
-    });
-    // SDK v1.x: result.embeddings[0].values
-    const values = result?.embeddings?.[0]?.values;
-    if (!values) return null;
-    return new Float32Array(values);
-  } catch (err) {
-    logger.warn(`embedder: failed — ${err.message}`);
-    return null;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const ai     = getClient();
+      const result = await ai.models.embedContent({
+        model:    EMBED_MODEL,
+        contents: text.slice(0, 2000),
+      });
+      const values = result?.embeddings?.[0]?.values;
+      if (!values) return null;
+      return new Float32Array(values);
+    } catch (err) {
+      const is429 = err?.status === 429 || err?.code === 429 ||
+                    (err.message && err.message.includes('429'));
+      if (is429 && attempt < MAX_RETRIES) {
+        // Parse retryDelay from error or use exponential backoff
+        const match = err.message?.match(/retry\s*(?:in|Delay[":]*\s*)"?\s*(\d+)/i);
+        const waitSec = match ? parseInt(match[1], 10) : (15 * Math.pow(2, attempt));
+        logger.warn(`embedder: 429 hit, waiting ${waitSec}s (attempt ${attempt + 1}/${MAX_RETRIES})`);
+        await sleep(waitSec * 1000);
+        continue;
+      }
+      logger.warn(`embedder: failed — ${err.message}`);
+      return null;
+    }
   }
+  return null;
 }
 
 /**
  * Embed multiple strings. Returns array of Float32Array | null (same length as input).
- * Uses individual embedContent calls with concurrency cap of 8 (rate-limit safe).
+ * Concurrency capped at 4 with inter-batch delay to respect free-tier RPM limits.
  */
 async function embedBatch(texts) {
   if (!texts.length) return [];
 
-  const CONCURRENCY = 8;
+  const CONCURRENCY = 4; // reduced from 8 to stay under 100 RPM
+  const INTER_BATCH_DELAY_MS = 3000; // 4 calls per 3s ≈ 80 RPM, well under 100
   const results = new Array(texts.length).fill(null);
 
   for (let i = 0; i < texts.length; i += CONCURRENCY) {
@@ -58,6 +75,11 @@ async function embedBatch(texts) {
     );
     for (let j = 0; j < settled.length; j++) {
       results[i + j] = settled[j].status === 'fulfilled' ? settled[j].value : null;
+    }
+
+    // Throttle between batches (skip after last batch)
+    if (i + CONCURRENCY < texts.length) {
+      await sleep(INTER_BATCH_DELAY_MS);
     }
   }
   return results;

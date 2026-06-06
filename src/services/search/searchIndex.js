@@ -4,13 +4,10 @@
  * Architecture:
  *   - Pulls all LUCA_Dump pages from Notion at startup
  *   - Builds text blobs per page (title + og_title + og_description + summary + tags + raw_content)
- *   - Embeds all blobs via Gemini text-embedding-004 (batched)
+ *   - Embeds all blobs via Gemini embedding (batched, rate-limit safe)
  *   - Stores {pageId, meta, embedding} in memory
- *   - Refreshes every REFRESH_INTERVAL_MS
+ *   - Refreshes every REFRESH_INTERVAL_MS (incremental — only re-embeds changed pages)
  *   - Query: embed query → cosine similarity → hybrid re-rank (0.65 semantic + 0.35 keyword)
- *
- * Personal scale: 200-500 items × 768 dims × 4 bytes ≈ 600KB-1.5MB — fine in memory.
- * No external DB needed.
  */
 const { getNotion }               = require('../notion/notionClient');
 const config                      = require('../../config');
@@ -24,6 +21,8 @@ const index = {
   items:     [],  // [{ id, blob, meta, embedding: Float32Array|null }]
   lastBuilt: null,
   building:  false,
+  // Cache: pageId → { blob, embedding } — survives rebuilds for incremental
+  embedCache: new Map(),
 };
 
 // ─── Notion page → searchable document ───────────────────────────────────────
@@ -53,7 +52,6 @@ function pageToDoc(page) {
   const type    = readProp(page, 'type', 'select') || '';
   const linkUrl = readProp(page, 'link_url', 'url') || '';
 
-  // Concatenate in priority order for embedding
   const blob = [ogTitle, title, summary, ogDesc, tags, site, kind, type, raw]
     .filter(Boolean)
     .join(' | ')
@@ -110,14 +108,46 @@ async function buildIndex() {
     const pages = await fetchAllPages();
     logger.info(`searchIndex: fetched ${pages.length} pages`);
 
-    const docs   = pages.map(pageToDoc);
-    const blobs  = docs.map((d) => d.blob);
-    const embeddings = await embedBatch(blobs);
+    const docs = pages.map(pageToDoc);
 
-    index.items = docs.map((doc, i) => ({
-      ...doc,
-      embedding: embeddings[i] || null,
-    }));
+    // Incremental: only embed docs whose blob changed since last build
+    const toEmbed = [];
+    const toEmbedIdx = [];
+
+    for (let i = 0; i < docs.length; i++) {
+      const cached = index.embedCache.get(docs[i].id);
+      if (cached && cached.blob === docs[i].blob && cached.embedding) {
+        // Blob unchanged — reuse cached embedding
+        continue;
+      }
+      toEmbed.push(docs[i].blob);
+      toEmbedIdx.push(i);
+    }
+
+    logger.info(`searchIndex: ${toEmbed.length} pages need (re-)embedding, ${docs.length - toEmbed.length} cached`);
+
+    // Embed only changed pages
+    const newEmbeddings = toEmbed.length > 0 ? await embedBatch(toEmbed) : [];
+
+    // Update cache with new embeddings
+    for (let j = 0; j < toEmbedIdx.length; j++) {
+      const idx = toEmbedIdx[j];
+      if (newEmbeddings[j]) {
+        index.embedCache.set(docs[idx].id, {
+          blob: docs[idx].blob,
+          embedding: newEmbeddings[j],
+        });
+      }
+    }
+
+    // Build final index from cache
+    index.items = docs.map((doc) => {
+      const cached = index.embedCache.get(doc.id);
+      return {
+        ...doc,
+        embedding: cached?.embedding || null,
+      };
+    });
     index.lastBuilt = new Date();
 
     const embedded = index.items.filter((i) => i.embedding).length;
@@ -130,7 +160,6 @@ async function buildIndex() {
 }
 
 function startIndexer() {
-  // Non-blocking startup — don't delay server listen
   setTimeout(() => buildIndex().catch(() => {}), 2000);
   setInterval(() => buildIndex().catch(() => {}), REFRESH_INTERVAL_MS);
   logger.info(`searchIndex: indexer scheduled — refresh every ${REFRESH_INTERVAL_MS / 1000}s`);
@@ -143,24 +172,17 @@ function keywordScore(blob, tokens) {
   const lower = blob.toLowerCase();
   let score   = 0;
   for (const t of tokens) {
-    if (lower.includes(t)) score += 1 + (lower.split(t).length - 2) * 0.1; // frequency bonus
+    if (lower.includes(t)) score += 1 + (lower.split(t).length - 2) * 0.1;
   }
   return Math.min(score / tokens.length, 1);
 }
 
 // ─── Search ───────────────────────────────────────────────────────────────────
 
-/**
- * Search the index.
- * @param {string} query
- * @param {object} opts - { limit, keywordWeight }
- * @returns {Array} ranked results with score
- */
 async function search(query, { limit = 20, keywordWeight = 0.35 } = {}) {
   if (!query || !query.trim()) return [];
 
   if (!index.lastBuilt) {
-    // Index not ready — fallback to keyword-only
     logger.warn('searchIndex: index not ready — keyword fallback');
     const tokens = query.toLowerCase().split(/\s+/).filter((t) => t.length > 1);
     return index.items
@@ -182,7 +204,7 @@ async function search(query, { limit = 20, keywordWeight = 0.35 } = {}) {
   });
 
   return scored
-    .filter((r) => r.score > 0.05) // noise floor
+    .filter((r) => r.score > 0.05)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 }
@@ -196,9 +218,8 @@ function getStatus() {
   };
 }
 
-// Trigger index rebuild when new item ingested (call from telegramController)
 function invalidate() {
-  setTimeout(() => buildIndex().catch(() => {}), 5000); // small delay to let Notion settle
+  setTimeout(() => buildIndex().catch(() => {}), 5000);
 }
 
 module.exports = { search, startIndexer, getStatus, invalidate };
