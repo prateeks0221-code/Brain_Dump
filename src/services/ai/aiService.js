@@ -11,13 +11,39 @@ function getGemini() {
   return _gemini;
 }
 
+// ─── Retry helper for 429s ────────────────────────────────────────────────────
+
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+const MAX_RETRIES = 2;
+
+async function callWithRetry(fn, label) {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const is429 = err?.status === 429 || err?.code === 429 ||
+                    (err.message && err.message.includes('429'));
+      if (is429 && attempt < MAX_RETRIES) {
+        const match = err.message?.match(/retry\s*(?:in|Delay[":]*\s*)"?\s*(\d+)/i);
+        const waitSec = match ? Math.min(parseInt(match[1], 10), 120) : (30 * Math.pow(2, attempt));
+        logger.warn(`AI [${label}]: 429 hit, waiting ${waitSec}s (attempt ${attempt + 1}/${MAX_RETRIES})`);
+        await sleep(waitSec * 1000);
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
+// ─── AI functions ─────────────────────────────────────────────────────────────
+
 async function transcribeAudio(buffer, mimeType) {
-  // Gemini supports audio inline; encode as base64
   const ai = getGemini();
   if (!ai) return null;
   try {
     const base64 = buffer.toString('base64');
-    const result = await ai.models.generateContent({
+    const result = await callWithRetry(() => ai.models.generateContent({
       model: 'gemini-2.0-flash-lite',
       contents: [
         {
@@ -27,7 +53,7 @@ async function transcribeAudio(buffer, mimeType) {
           ],
         },
       ],
-    });
+    }), 'transcribe');
     const text = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
     logger.info('AI: transcription complete');
     return text || null;
@@ -41,7 +67,7 @@ async function generateSummaryAndTags(text) {
   const ai = getGemini();
   if (!ai || !text) return { summary: null, tags: [] };
   try {
-    const result = await ai.models.generateContent({
+    const result = await callWithRetry(() => ai.models.generateContent({
       model: 'gemini-2.0-flash-lite',
       contents: [
         {
@@ -53,7 +79,7 @@ async function generateSummaryAndTags(text) {
         },
       ],
       generationConfig: { responseMimeType: 'application/json' },
-    });
+    }), 'summary');
     const raw = result.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
     const parsed = JSON.parse(raw);
     logger.info('AI: summary + tags generated');
@@ -68,7 +94,7 @@ async function generateL2Context(ogDescription) {
   const ai = getGemini();
   if (!ai || !ogDescription) return null;
   try {
-    const result = await ai.models.generateContent({
+    const result = await callWithRetry(() => ai.models.generateContent({
       model: 'gemini-2.0-flash-lite',
       contents: [
         {
@@ -80,7 +106,7 @@ async function generateL2Context(ogDescription) {
         },
       ],
       generationConfig: { responseMimeType: 'application/json' },
-    });
+    }), 'L2');
     const raw = result.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
     const parsed = JSON.parse(raw);
     logger.info('AI: L2 context generated');
